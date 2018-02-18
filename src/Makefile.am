@@ -48,8 +48,6 @@ pcscd_SOURCES = \
 	eventhandler.h \
 	hotplug_generic.c \
 	hotplug.h \
-	ifdwrapper.c \
-	ifdwrapper.h \
 	misc.h \
 	parser.h \
 	pcscdaemon.c \
@@ -59,8 +57,6 @@ pcscd_SOURCES = \
 	PCSC/pcsclite.h \
 	PCSC/winscard.h \
 	PCSC/wintypes.h \
-	prothandler.c \
-	prothandler.h \
 	readerfactory.c \
 	readerfactory.h \
 	simclist.c \
@@ -70,7 +66,6 @@ pcscd_SOURCES = \
 	$(USB_CONFIG) \
 	utils.c \
 	utils.h \
-	winscard.c \
 	winscard_msg.c \
 	winscard_msg.h \
 	winscard_msg_srv.c \
