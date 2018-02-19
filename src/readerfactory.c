@@ -70,6 +70,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define FALSE 0
 #endif
 
+#define PCSCLITE_STATIC_DRIVER 1
+
 static READER_CONTEXT * sReadersContexts[PCSCLITE_MAX_READERS_CONTEXTS];
 READER_STATE readerStates[PCSCLITE_MAX_READERS_CONTEXTS];
 static int maxReaderHandles = PCSC_MAX_READER_HANDLES;
@@ -329,18 +331,22 @@ LONG RFAddReader(const char *readerNameLong, int port, const char *library,
 		  sReadersContexts[parentNode]->pMutex;
 
 		/* Call on the parent driver to see if it is thread safe */
+#if 0
 		dwGetSize = sizeof(ucThread);
 		rv = IFDGetCapabilities(sReadersContexts[parentNode],
 			TAG_IFD_THREAD_SAFE, &dwGetSize, ucThread);
 
 		if (rv == IFD_SUCCESS && dwGetSize == 1 && ucThread[0] == 1)
+#endif
 		{
 			Log1(PCSC_LOG_INFO, "Driver is thread safe");
 			sReadersContexts[dwContext]->mMutex = NULL;
 			sReadersContexts[dwContext]->pMutex = NULL;
 		}
+#if 0
 		else
 			*(sReadersContexts[dwContext])->pMutex += 1;
+#endif
 	}
 
 	if (sReadersContexts[dwContext]->pFeeds == NULL)
@@ -380,6 +386,7 @@ LONG RFAddReader(const char *readerNameLong, int port, const char *library,
 
 	/* asynchronous card movement?  */
 	{
+#if 0
 		RESPONSECODE (*fct)(DWORD, int) = NULL;
 
 		dwGetSize = sizeof(fct);
@@ -387,14 +394,17 @@ LONG RFAddReader(const char *readerNameLong, int port, const char *library,
 		rv = IFDGetCapabilities(sReadersContexts[dwContext],
 			TAG_IFD_POLLING_THREAD_WITH_TIMEOUT, &dwGetSize, (PUCHAR)&fct);
 		if ((rv != SCARD_S_SUCCESS) || (dwGetSize != sizeof(fct)))
+#endif
 		{
 			Log1(PCSC_LOG_INFO, "Using the pcscd polling thread");
 		}
+#if 0
 		else
 		{
 			sReadersContexts[dwContext]->pthCardEvent = fct;
 			Log1(PCSC_LOG_INFO, "Using the reader polling thread");
 		}
+#endif
 
 		rv = EHSpawnEventHandler(sReadersContexts[dwContext]);
 		if (rv != SCARD_S_SUCCESS)
@@ -406,6 +416,7 @@ LONG RFAddReader(const char *readerNameLong, int port, const char *library,
 	}
 
 	/* Call on the driver to see if there are multiple slots */
+#if 0
 	dwGetSize = sizeof(ucGetData);
 	rv = IFDGetCapabilities((sReadersContexts[dwContext]),
 		TAG_IFD_SLOTS_NUMBER, &dwGetSize, ucGetData);
@@ -515,11 +526,13 @@ LONG RFAddReader(const char *readerNameLong, int port, const char *library,
 		sReadersContexts[dwContextB]->reference = 1;
 
 		/* Call on the parent driver to see if the slots are thread safe */
+#if 0
 		dwGetSize = sizeof(ucThread);
 		rv = IFDGetCapabilities((sReadersContexts[dwContext]),
 			TAG_IFD_SLOT_THREAD_SAFE, &dwGetSize, ucThread);
 
 		if (rv == IFD_SUCCESS && dwGetSize == 1 && ucThread[0] == 1)
+#endif
 		{
 			Log1(PCSC_LOG_INFO, "Driver is slot thread safe");
 
@@ -535,8 +548,10 @@ LONG RFAddReader(const char *readerNameLong, int port, const char *library,
 			sReadersContexts[dwContextB]->pMutex = malloc(sizeof(int));
 			*(sReadersContexts[dwContextB])->pMutex = 1;
 		}
+#if 0
 		else
 			*(sReadersContexts[dwContextB])->pMutex += 1;
+#endif
 
 		dwNumReadersContexts += 1;
 
@@ -571,6 +586,7 @@ LONG RFAddReader(const char *readerNameLong, int port, const char *library,
 			return rv;
 		}
 	}
+#endif
 
 	return SCARD_S_SUCCESS;
 }
@@ -714,6 +730,7 @@ LONG RFSetReaderName(READER_CONTEXT * rContext, const char *readerName,
 					LONG ret;
 
 					/* Ask the driver if it supports multiple channels */
+#if 0
 					valueLength = sizeof(tagValue);
 					ret = IFDGetCapabilities(sReadersContexts[i],
 						TAG_IFD_SIMULTANEOUS_ACCESS,
@@ -727,6 +744,7 @@ LONG RFSetReaderName(READER_CONTEXT * rContext, const char *readerName,
 							"Support %d simultaneous readers", tagValue[0]);
 					}
 					else
+#endif
 						supportedChannels = 1;
 
 					/* Check to see if it is a hotplug reader and different */
@@ -1098,6 +1116,7 @@ LONG RFInitializeReader(READER_CONTEXT * rContext)
 #endif
 
 	/* tries to open the port */
+#if 0
 	rv = IFDOpenIFD(rContext);
 
 	if (rv != IFD_SUCCESS)
@@ -1116,6 +1135,7 @@ LONG RFInitializeReader(READER_CONTEXT * rContext)
 		else
 			return SCARD_E_INVALID_TARGET;
 	}
+#endif
 
 	return SCARD_S_SUCCESS;
 }
@@ -1126,11 +1146,13 @@ void RFUnInitializeReader(READER_CONTEXT * rContext)
 		rContext->readerState->readerName);
 
 	/* Do not close a reader if IFDOpenIFD() failed in RFInitializeReader() */
+#if 0
 	if (rContext->slot != -1)
 		(void)IFDCloseIFD(rContext);
 
 	(void)RFUnBindFunctions(rContext);
 	(void)RFUnloadReader(rContext);
+#endif
 
 	/*
 	 * Zero out the public status struct to allow it to be recycled and
