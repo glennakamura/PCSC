@@ -175,12 +175,14 @@ void EHDestroyEventHandler(READER_CONTEXT * rContext)
 	Log1(PCSC_LOG_INFO, "Stomping thread.");
 
 	/* kill the "polling" thread */
+#if 0
 	dwGetSize = sizeof(ucGetData);
 	rv = IFDGetCapabilities(rContext, TAG_IFD_POLLING_THREAD_KILLABLE,
 		&dwGetSize, ucGetData);
+#endif
 
 #ifdef HAVE_PTHREAD_CANCEL
-	if ((IFD_SUCCESS == rv) && (1 == dwGetSize) && ucGetData[0])
+	if (1) //((IFD_SUCCESS == rv) && (1 == dwGetSize) && ucGetData[0])
 	{
 		Log1(PCSC_LOG_INFO, "Killing polling thread");
 		(void)pthread_cancel(rContext->pthThread);
@@ -189,6 +191,7 @@ void EHDestroyEventHandler(READER_CONTEXT * rContext)
 #endif
 	{
 		/* ask to stop the "polling" thread */
+#if 0
 		RESPONSECODE (*fct)(DWORD) = NULL;
 
 		dwGetSize = sizeof(fct);
@@ -201,6 +204,7 @@ void EHDestroyEventHandler(READER_CONTEXT * rContext)
 			fct(rContext->slot);
 		}
 		else
+#endif
 			Log1(PCSC_LOG_INFO, "Waiting polling thread");
 	}
 
@@ -222,6 +226,7 @@ LONG EHSpawnEventHandler(READER_CONTEXT * rContext)
 	LONG rv;
 	DWORD dwStatus = 0;
 
+#if 0
 	rv = IFDStatusICC(rContext, &dwStatus);
 	if (rv != SCARD_S_SUCCESS)
 	{
@@ -229,6 +234,7 @@ LONG EHSpawnEventHandler(READER_CONTEXT * rContext)
 			rContext->readerState->readerName);
 		return SCARD_F_UNKNOWN_ERROR;
 	}
+#endif
 
 	rv = ThreadCreate(&rContext->pthThread, 0,
 		(PCSCLITE_THREAD_FUNCTION( ))EHStatusHandlerThread, (LPVOID) rContext);
@@ -243,6 +249,7 @@ LONG EHSpawnEventHandler(READER_CONTEXT * rContext)
 
 static void * EHStatusHandlerThread(READER_CONTEXT * rContext)
 {
+#if 0
 	LONG rv;
 #ifndef NO_LOG
 	const char *readerName;
@@ -506,5 +513,6 @@ static void * EHStatusHandlerThread(READER_CONTEXT * rContext)
 			(void)pthread_exit(NULL);
 		}
 	}
+#endif
 }
 
