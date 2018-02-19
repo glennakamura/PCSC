@@ -52,6 +52,17 @@ case "$host" in
 	;;
 esac
 
+case "$host" in
+*-*-darwin*)
+	AC_SUBST(PCSC_FRAMEWORK)
+	PCSC_FRAMEWORK="-framework PCSC"
+	;;
+*)
+	AC_SUBST(PCSCLITE_LIBS)
+	PCSCLITE_LIBS="-lpcsclite"
+	;;
+esac
+
 # Options
 AM_MAINTAINER_MODE
 
