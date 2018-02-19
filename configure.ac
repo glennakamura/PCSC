@@ -164,7 +164,7 @@ AC_CHECK_LIB(rt, mq_getattr, [LIBS="$LIBS -lrt"])
 # check for libsystemd
 AC_ARG_ENABLE(libsystemd,
 	AS_HELP_STRING([--disable-libsystemd],[do not use libsystemd]),
-	[ use_libsystemd="${enableval}" ], [ use_libsystemd="yes" ] )
+	[ use_libsystemd="${enableval}" ], [ use_libsystemd="no" ] )
 if test "$use_libsystemd" != "no"; then
 	PKG_CHECK_MODULES(LIBSYSTEMD, libsystemd,,
 		[ AC_MSG_ERROR([install libsystemd-dev or use --disable-libsystemd]) ])
@@ -175,7 +175,7 @@ fi
 # --disable-serial
 AC_ARG_ENABLE(serial,
 	AS_HELP_STRING([--disable-serial],[do not use serial reader.conf file]),
-	[ use_serial="${enableval}" ], [ use_serial="yes" ] )
+	[ use_serial="${enableval}" ], [ use_serial="no" ] )
 AM_CONDITIONAL(ENABLE_SERIAL, test "$use_serial" != "no")
 if test "$use_serial" != "no"; then
 	AC_DEFINE(USE_SERIAL, 1, [Use serial conf file mechanism])
@@ -185,7 +185,7 @@ fi
 # --disable-usb
 AC_ARG_ENABLE(usb,
 	AS_HELP_STRING([--disable-usb],[do not use usb hotplug]),
-	[ use_usb="${enableval}" ], [ use_usb="yes" ] )
+	[ use_usb="${enableval}" ], [ use_usb="no" ] )
 AM_CONDITIONAL(ENABLE_USB, test "$use_usb" != "no")
 if test "$use_usb" != "no"; then
 	AC_DEFINE(USE_USB, 1, [Use USB hotplug mechanism])
@@ -381,7 +381,7 @@ AC_ARG_ENABLE(ipcdir,
 [ipcdir="${enableval}"], [ipcdir=false])
 
 if test x${ipcdir} = xfalse ; then
-	ipcdir="/var/run/pcscd"
+	ipcdir="/tmp"
 fi
 AC_DEFINE_UNQUOTED(USE_IPCDIR, "$ipcdir", [directory containing IPC files])
 PCSCLITE_FEATURES="${PCSCLITE_FEATURES} ipcdir=${ipcdir}"
