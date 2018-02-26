@@ -172,6 +172,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 	void RFCleanupReaders(void);
 	void RFWaitForReaderInit(void);
 	int RFStartSerialReaders(const char *readerconf);
+	int RFStartWinscardReaders();
 	void RFReCheckReaderConf(void);
 
 #endif
