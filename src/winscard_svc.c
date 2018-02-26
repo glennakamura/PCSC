@@ -503,9 +503,15 @@ static void ContextThread(LPVOID newContext)
 				coStr.hCard = hCard;
 				coStr.dwActiveProtocol = dwActiveProtocol;
 
-				if (coStr.rv == SCARD_S_SUCCESS)
+				if (coStr.rv == SCARD_S_SUCCESS) {
+					READER_CONTEXT *rContext;
 					coStr.rv = MSGAddHandle(coStr.hContext, coStr.hCard,
 						threadContext);
+					if (RFReaderInfo(coStr.szReader, &rContext) == SCARD_S_SUCCESS) {
+						rContext->readerState->cardProtocol = dwActiveProtocol;
+						UNREF_READER(rContext);
+					}
+				}
 
 				WRITE_BODY(coStr);
 			}
