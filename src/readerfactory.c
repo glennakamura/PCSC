@@ -55,6 +55,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "misc.h"
 #include "pcscd.h"
+#include "winscard.h"
 #include "debuglog.h"
 #include "readerfactory.h"
 #include "dyn_generic.h"
@@ -217,12 +218,12 @@ LONG RFAddReader(const char *readerNameLong, int port, const char *library,
 	strcpy(readerName, readerNameLong);
 
 	/* Reader name too long? also count " 00 00"*/
-	if (strlen(readerName) > MAX_READERNAME - sizeof(" 00 00"))
+	if (strlen(readerName) > MAX_READERNAME)
 	{
 		Log3(PCSC_LOG_ERROR,
 			"Reader name too long: %zd chars instead of max %zd. Truncating!",
-			strlen(readerName), MAX_READERNAME - sizeof(" 00 00"));
-		readerName[MAX_READERNAME - sizeof(" 00 00")] = '\0';
+			strlen(readerName), MAX_READERNAME);
+		readerName[MAX_READERNAME] = '\0';
 	}
 
 	/* Same name, same port, same device - duplicate reader cannot be used */
@@ -233,14 +234,14 @@ LONG RFAddReader(const char *readerNameLong, int port, const char *library,
 			if (sReadersContexts[i]->vHandle != 0)
 			{
 				char lpcStripReader[MAX_READERNAME];
-				int tmplen;
+				//int tmplen;
 
 				/* get the reader name without the reader and slot numbers */
 				strncpy(lpcStripReader,
 					sReadersContexts[i]->readerState->readerName,
 					sizeof(lpcStripReader));
-				tmplen = strlen(lpcStripReader);
-				lpcStripReader[tmplen - 6] = 0;
+				//tmplen = strlen(lpcStripReader);
+				//lpcStripReader[tmplen - 6] = 0;
 
 				if ((strcmp(readerName, lpcStripReader) == 0)
 					&& (port == sReadersContexts[i]->port)
@@ -620,10 +621,10 @@ LONG RFRemoveReader(const char *readerName, int port)
 			strncpy(lpcStripReader,
 				sReadersContexts[i]->readerState->readerName,
 				sizeof(lpcStripReader));
-			lpcStripReader[strlen(lpcStripReader) - 6 - extend_size] = 0;
+			//lpcStripReader[strlen(lpcStripReader) - 6 - extend_size] = 0;
 
 			/* Compare only the significant part of the reader name */
-			if ((strncmp(readerName, lpcStripReader, MAX_READERNAME - sizeof(" 00 00")) == 0)
+			if ((strncmp(readerName, lpcStripReader, MAX_READERNAME) == 0)
 				&& (port == sReadersContexts[i]->port))
 			{
 				/* remove the reader */
@@ -816,8 +817,8 @@ LONG RFSetReaderName(READER_CONTEXT * rContext, const char *readerName,
 #endif
 
 	snprintf(rContext->readerState->readerName,
-		sizeof(rContext->readerState->readerName), "%s%s %02X 00",
-		readerName, extend, i);
+		sizeof(rContext->readerState->readerName), "%s",
+		readerName);
 
 	/* Set the slot in 0xDDDDCCCC */
 	rContext->slot = i << 16;
@@ -1586,3 +1587,145 @@ void RFReCheckReaderConf(void)
 }
 #endif
 
+static pthread_t winscardReadersThread;
+static SCARD_READERSTATE rgscState[PCSCLITE_MAX_READERS_CONTEXTS];
+
+static void RFRemoveWinscardReaders(LPSTR mszReaders)
+{
+	int i;
+	for (i = 0; i < PCSCLITE_MAX_READERS_CONTEXTS; i++)
+	{
+		if (sReadersContexts[i]->vHandle != 0)
+		{
+			char *readerName = sReadersContexts[i]->readerState->readerName;
+			char *p = mszReaders;
+			while (*p != 0)
+			{
+				if (strncmp(p, readerName, MAX_READERNAME) == 0)
+					break;
+				p += strlen(p) + 1;
+			}
+			if (*p == 0)
+			{
+				LONG rv = RFRemoveReader(readerName, sReadersContexts[i]->port);
+				if (rv != SCARD_S_SUCCESS)
+					Log2(PCSC_LOG_ERROR, "RFRemoveReader error: 0x%08lX", rv);
+			}
+		}
+	}
+}
+
+static int RFListWinscardReaders(SCARDCONTEXT hContext)
+{
+	LPSTR mszReaders;
+	DWORD dwReaders;
+	LONG rv;
+
+	rgscState[0].szReader = "\\\\?PnP?\\Notification";
+	rgscState[0].dwCurrentState = SCARD_STATE_UNAWARE;
+
+	rv = SCardListReaders(hContext, NULL, NULL, &dwReaders);
+	mszReaders = alloca(dwReaders);
+	rv = SCardListReaders(hContext, NULL, mszReaders, &dwReaders);
+	if (rv == SCARD_S_SUCCESS)
+	{
+		READER_CONTEXT *rContext;
+		char *p = mszReaders;
+		int i;
+		RFRemoveWinscardReaders(mszReaders);
+		for (i = 1; i < PCSCLITE_MAX_READERS_CONTEXTS; i++)
+		{
+			if (*p == 0)
+				break;
+			rv = RFReaderInfo(p, &rContext);
+			if (rv != SCARD_S_SUCCESS)
+			{
+				rv = RFAddReader(p, 0, "winscard", "winscard");
+				if (rv == SCARD_S_SUCCESS)
+					rv = RFReaderInfo(p, &rContext);
+			}
+			if (rv == SCARD_S_SUCCESS)
+			{
+				rContext->readerState->eventCounter += 1;
+				if (rgscState[i].dwEventState & SCARD_STATE_PRESENT)
+					rContext->readerState->readerState = SCARD_PRESENT;
+				else
+					rContext->readerState->readerState = SCARD_ABSENT;
+				rContext->readerState->cardAtrLength = rgscState[i].cbAtr;
+				memcpy(rContext->readerState->cardAtr, rgscState[i].rgbAtr,
+					min(rgscState[i].cbAtr, MAX_ATR_SIZE));
+				UNREF_READER(rContext);
+			}
+			if (rgscState[i].szReader)
+				free(rgscState[i].szReader);
+			rgscState[i].szReader = strdup(p);
+			rgscState[i].dwCurrentState = SCARD_STATE_UNAWARE;
+			p += strlen(p) + 1;
+		}
+		EHSignalEventToClients();
+		return i;
+	}
+	return 1;
+}
+
+static void RFUpdateWinscardReaders(void)
+{
+	READER_CONTEXT *rContext;
+	SCARDCONTEXT hContext;
+	LONG rv;
+	int i, n;
+
+	rv = SCardEstablishContext(SCARD_SCOPE_SYSTEM, NULL, NULL, &hContext);
+	if (rv != SCARD_S_SUCCESS)
+		return;
+
+	n = RFListWinscardReaders(hContext);
+	while (1)
+	{
+		SYS_USleep(1000*1000); /* 1 sec */
+		rv = SCardGetStatusChange(hContext, INFINITE, rgscState, n);
+		if (rv != SCARD_S_SUCCESS)
+		{
+			n = RFListWinscardReaders(hContext);
+			continue;
+		}
+		else
+		{
+			if (rgscState[0].dwEventState & SCARD_STATE_CHANGED)
+			{
+				n = RFListWinscardReaders(hContext);
+				continue;
+			}
+			rgscState[0].dwCurrentState = SCARD_STATE_UNAWARE;
+			for (i = 1; i < n; i++)
+			{
+				rgscState[i].dwCurrentState = rgscState[i].dwEventState;
+				rv = RFReaderInfo(rgscState[i].szReader, &rContext);
+				if (rv == SCARD_S_SUCCESS)
+				{
+					rContext->readerState->eventCounter += 1;
+					if (rgscState[i].dwEventState & SCARD_STATE_PRESENT)
+						rContext->readerState->readerState = SCARD_PRESENT;
+					else
+						rContext->readerState->readerState = SCARD_ABSENT;
+					rContext->readerState->cardAtrLength = rgscState[i].cbAtr;
+					memcpy(rContext->readerState->cardAtr, rgscState[i].rgbAtr,
+						min(rgscState[i].cbAtr, MAX_ATR_SIZE));
+					UNREF_READER(rContext);
+				}
+			}
+			EHSignalEventToClients();
+		}
+	}
+}
+
+int RFStartWinscardReaders()
+{
+	if (ThreadCreate(&winscardReadersThread, THREAD_ATTR_DETACHED,
+		(PCSCLITE_THREAD_FUNCTION( )) RFUpdateWinscardReaders, NULL))
+	{
+		Log1(PCSC_LOG_ERROR, "ThreadCreate() failed");
+		return -1;
+	}
+	return 0;
+}

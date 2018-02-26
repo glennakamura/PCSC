@@ -659,6 +659,9 @@ int main(int argc, char **argv)
 			at_exit();
 	}
 #endif
+	rv = RFStartWinscardReaders();
+	if (rv != 0)
+		at_exit();
 
 	Log1(PCSC_LOG_INFO, "pcsc-lite " VERSION " daemon ready.");
 
