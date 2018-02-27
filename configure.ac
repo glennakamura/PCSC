@@ -55,7 +55,7 @@ esac
 case "$host" in
 *-*-darwin*)
 	AC_SUBST(PCSC_FRAMEWORK)
-	PCSC_FRAMEWORK="-framework PCSC"
+	PCSC_FRAMEWORK="-framework PCSC -DSCardControl=SCardControl132"
 	;;
 *)
 	AC_SUBST(PCSCLITE_LIBS)
