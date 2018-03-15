@@ -1,11 +1,9 @@
-SUBDIRS = spy
-
 AM_CPPFLAGS = -I$(top_srcdir)/src/PCSC -I$(top_builddir)/src/PCSC \
 	$(SYMBOL_VISIBILITY)
 
-lib_LTLIBRARIES = libpcsclite.la
+noinst_LTLIBRARIES = libpcsclite.la
 
-sbin_PROGRAMS = pcscd
+bin_PROGRAMS = pcscd
 noinst_PROGRAMS = testpcsc pcsc-wirecheck pcsc-wirecheck-gen
 
 if ENABLE_SERIAL
@@ -119,19 +117,6 @@ regen: pcsc-wirecheck-gen
 	rm -f $(srcdir)/pcsc-wirecheck-dist.c
 	./pcsc-wirecheck-gen > $(srcdir)/pcsc-wirecheck-dist.c.tmp
 	mv $(srcdir)/pcsc-wirecheck-dist.c.tmp $(srcdir)/pcsc-wirecheck-dist.c
-
-nobase_include_HEADERS = \
-	PCSC/debuglog.h \
-	PCSC/ifdhandler.h \
-	PCSC/reader.h \
-	PCSC/winscard.h \
-	PCSC/wintypes.h
-
-nodistheaderdir = $(includedir)/PCSC
-nodistheader_DATA = PCSC/pcsclite.h
-
-pcdir= $(libdir)/pkgconfig
-pc_DATA = libpcsclite.pc
 
 # Hack to be able to use flex -P to enable linking of multiple lexer
 # sources into one library, until we find a way to make automake handle
