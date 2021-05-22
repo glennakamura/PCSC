@@ -1,7 +1,7 @@
 /*
  * Reads lexical config files and updates database.
  *
- * MUSCLE SmartCard Development ( http://pcsclite.alioth.debian.org/pcsclite.html )
+ * MUSCLE SmartCard Development ( https://pcsclite.apdu.fr/ )
  *
  * Copyright (C) 1999-2002
  *  David Corcoran <corcoran@musclecard.com>
@@ -58,7 +58,7 @@ static SerialReader *reader_list;
 static int reader_list_size;
 const char *ConfFile;
 
-void tok_error(char *pcToken_error);
+void tok_error(const char *pcToken_error);
 
 %}
 
@@ -72,7 +72,7 @@ void tok_error(char *pcToken_error);
 "\n"                                      { iLinenumber++; }
 (\"[^"\n]*["\n])|(\'[^'\n]*['\n])         { (void)evaluatetoken(yytext); }
 [ \t]                                     {}
-([A-Z]|[a-z]|[0-9]|[\\\/\-\.\_\@:])+      { (void)evaluatetoken(yytext); }
+([A-Z]|[a-z]|[0-9]|[=\\\/\-\.\_\@:])+      { (void)evaluatetoken(yytext); }
 .                     { iOldLinenumber = iLinenumber; tok_error(yytext); }
 %%
 
@@ -216,9 +216,18 @@ int evaluatetoken(char *pcToken)
 		}
 		else
 		{
+			SerialReader *new_reader_list = NULL;
 			reader_list_size++;
-			reader_list = realloc(reader_list, reader_list_size *
+			new_reader_list = realloc(reader_list, reader_list_size *
 				sizeof(SerialReader));
+			if (new_reader_list == NULL)
+				free(reader_list);
+			reader_list = new_reader_list;
+		}
+		if (reader_list == NULL)
+		{
+			tok_error("No Memory");
+			return 1;
 		}
 
 		/* end marker */
@@ -255,7 +264,7 @@ int evaluatetoken(char *pcToken)
 	return 0;
 }
 
-void tok_error(char *token_error)
+void tok_error(const char *token_error)
 {
 #ifdef NO_LOG
 	(void)token_error;

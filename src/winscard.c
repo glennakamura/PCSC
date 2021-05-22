@@ -1,5 +1,5 @@
 /*
- * MUSCLE SmartCard Development ( http://pcsclite.alioth.debian.org/pcsclite.html )
+ * MUSCLE SmartCard Development ( https://pcsclite.apdu.fr/ )
  *
  * Copyright (C) 1999-2004
  *  David Corcoran <corcoran@musclecard.com>
@@ -348,8 +348,8 @@ LONG SCardConnect(/*@unused@*/ SCARDCONTEXT hContext, LPCSTR szReader,
 		}
 
 		/* the card is now in use */
-		rContext->powerState = POWER_STATE_INUSE;
-		Log1(PCSC_LOG_DEBUG, "powerState: POWER_STATE_INUSE");
+		rContext->powerState = POWER_STATE_IN_USE;
+		Log1(PCSC_LOG_DEBUG, "powerState: POWER_STATE_IN_USE");
 		(void)pthread_mutex_unlock(&rContext->powerState_lock);
 	}
 
@@ -583,9 +583,6 @@ LONG SCardReconnect(SCARDHANDLE hCard, DWORD dwShareMode,
 		 */
 		RFSetReaderEventState(rContext, SCARD_RESET);
 
-		/*
-		 * Currently pcsc-lite keeps the card powered constantly
-		 */
 		dwAtrLen = sizeof(rContext->readerState->cardAtr);
 		if (SCARD_RESET_CARD == dwInitialization)
 			rv = IFDPowerICC(rContext, IFD_RESET,
@@ -603,7 +600,7 @@ LONG SCardReconnect(SCARDHANDLE hCard, DWORD dwShareMode,
 		/*
 		 * Set up the status bit masks on readerState
 		 */
-		if (rv == SCARD_S_SUCCESS)
+		if (rv == IFD_SUCCESS)
 		{
 			rContext->readerState->cardAtrLength = dwAtrLen;
 			rContext->readerState->readerState =
@@ -716,6 +713,12 @@ LONG SCardReconnect(SCARDHANDLE hCard, DWORD dwShareMode,
 					goto exit;
 				}
 			}
+
+			/* the card is now in use */
+			(void)pthread_mutex_lock(&rContext->powerState_lock);
+			rContext->powerState = POWER_STATE_IN_USE;
+			Log1(PCSC_LOG_DEBUG, "powerState: POWER_STATE_IN_USE");
+			(void)pthread_mutex_unlock(&rContext->powerState_lock);
 		}
 	}
 
@@ -904,7 +907,7 @@ LONG SCardDisconnect(SCARDHANDLE hCard, DWORD dwDisposition)
 		/* the protocol is unset after a power on */
 		rContext->readerState->cardProtocol = SCARD_PROTOCOL_UNDEFINED;
 
-		if (rv == SCARD_S_SUCCESS)
+		if (rv == IFD_SUCCESS)
 		{
 			if (SCARD_UNPOWER_CARD == dwDisposition)
 				rContext->readerState->readerState = SCARD_PRESENT;
@@ -1131,9 +1134,6 @@ LONG SCardEndTransaction(SCARDHANDLE hCard, DWORD dwDisposition)
 	{
 		DWORD dwAtrLen;
 
-		/*
-		 * Currently pcsc-lite keeps the card always powered
-		 */
 		dwAtrLen = sizeof(rContext->readerState->cardAtr);
 		if (SCARD_RESET_CARD == dwDisposition)
 			rv = IFDPowerICC(rContext, IFD_RESET,
@@ -1156,7 +1156,7 @@ LONG SCardEndTransaction(SCARDHANDLE hCard, DWORD dwDisposition)
 		/*
 		 * Set up the status bit masks on readerState
 		 */
-		if (rv == SCARD_S_SUCCESS)
+		if (rv == IFD_SUCCESS)
 		{
 			rContext->readerState->cardAtrLength = dwAtrLen;
 			rContext->readerState->readerState =
@@ -1580,7 +1580,7 @@ LONG SCardTransmit(SCARDHANDLE hCard, const SCARD_IO_REQUEST *pioSendPci,
 		unsigned long i;
 		unsigned long prot = rContext->readerState->cardProtocol;
 
-		for (i = 0 ; prot != 1 ; i++)
+		for (i = 0 ; prot != 1 && i < 16; i++)
 			prot >>= 1;
 
 		sSendPci.Protocol = i;
@@ -1618,6 +1618,14 @@ LONG SCardTransmit(SCARDHANDLE hCard, const SCARD_IO_REQUEST *pioSendPci,
 	{
 		*pcbRecvLength = 0;
 		Log2(PCSC_LOG_ERROR, "Card not transacted: 0x%08lX", rv);
+
+        if (SCARD_E_NO_SMARTCARD == rv)
+        {
+            rContext->readerState->cardAtrLength = 0;
+            rContext->readerState->cardProtocol = SCARD_PROTOCOL_UNDEFINED;
+            rContext->readerState->readerState = SCARD_ABSENT;
+        }
+
 		goto exit;
 	}
 

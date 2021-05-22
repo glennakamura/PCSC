@@ -1,5 +1,5 @@
 /*
- * MUSCLE SmartCard Development ( http://pcsclite.alioth.debian.org/pcsclite.html )
+ * MUSCLE SmartCard Development ( https://pcsclite.apdu.fr/ )
  *
  * Copyright (C) 1999-2004
  *  David Corcoran <corcoran@musclecard.com>
@@ -388,6 +388,8 @@ static LONG SCardGetSetAttrib(SCARDHANDLE hCard, int command, DWORD dwAttrId,
 	LPBYTE pbAttr, LPDWORD pcbAttrLen);
 
 static LONG getReaderStates(SCONTEXTMAP * currentContextMap);
+static LONG getReaderStatesAndRegisterForEvents(SCONTEXTMAP * currentContextMap);
+static LONG unregisterFromEvents(SCONTEXTMAP * currentContextMap);
 
 /*
  * Thread safety functions
@@ -593,7 +595,7 @@ static LONG SCardEstablishContextTH(DWORD dwScope,
 		rv = MessageSendWithHeader(CMD_VERSION, dwClientID, sizeof(veStr),
 			&veStr);
 		if (rv != SCARD_S_SUCCESS)
-			return rv;
+			goto cleanup;
 
 		/* Read a message from the server */
 		rv = MessageReceive(&veStr, sizeof(veStr), dwClientID);
@@ -601,14 +603,18 @@ static LONG SCardEstablishContextTH(DWORD dwScope,
 		{
 			Log1(PCSC_LOG_CRITICAL,
 				"Your pcscd is too old and does not support CMD_VERSION");
-			return SCARD_F_COMM_ERROR;
+			rv = SCARD_F_COMM_ERROR;
+			goto cleanup;
 		}
 
 		Log3(PCSC_LOG_INFO, "Server is protocol version %d:%d",
 			veStr.major, veStr.minor);
 
 		if (veStr.rv != SCARD_S_SUCCESS)
-			return veStr.rv;
+		{
+			rv = veStr.rv;
+			goto cleanup;
+		}
 	}
 
 again:
@@ -623,7 +629,7 @@ again:
 		sizeof(scEstablishStruct), (void *) &scEstablishStruct);
 
 	if (rv != SCARD_S_SUCCESS)
-		return rv;
+		goto cleanup;
 
 	/*
 	 * Read the response from the server
@@ -632,10 +638,13 @@ again:
 		dwClientID);
 
 	if (rv != SCARD_S_SUCCESS)
-		return rv;
+		goto cleanup;
 
 	if (scEstablishStruct.rv != SCARD_S_SUCCESS)
-		return scEstablishStruct.rv;
+	{
+		rv = scEstablishStruct.rv;
+		goto cleanup;
+	}
 
 	/* check we do not reuse an existing hContext */
 	if (NULL != SCardGetContextTH(scEstablishStruct.hContext))
@@ -649,6 +658,11 @@ again:
 	 * Allocate the new hContext - if allocator full return an error
 	 */
 	rv = SCardAddContext(*phContext, dwClientID);
+
+	return rv;
+
+cleanup:
+	ClientCloseSession(dwClientID);
 
 	return rv;
 }
@@ -1234,7 +1248,6 @@ LONG SCardEndTransaction(SCARDHANDLE hCard, DWORD dwDisposition)
 {
 	LONG rv;
 	struct end_struct scEndStruct;
-	int randnum;
 	SCONTEXTMAP * currentContextMap;
 	CHANNEL_MAP * pChannelMap;
 
@@ -1269,11 +1282,6 @@ LONG SCardEndTransaction(SCARDHANDLE hCard, DWORD dwDisposition)
 	if (rv != SCARD_S_SUCCESS)
 		goto end;
 
-	/*
-	 * This helps prevent starvation
-	 */
-	randnum = SYS_RandomInt(1000, 10000);
-	(void)SYS_USleep(randnum);
 	rv = scEndStruct.rv;
 
 end:
@@ -1736,7 +1744,7 @@ LONG SCardGetStatusChange(SCARDCONTEXT hContext, DWORD dwTimeout,
 	}
 
 	/* synchronize reader states with daemon */
-	rv = getReaderStates(currentContextMap);
+	rv = getReaderStatesAndRegisterForEvents(currentContextMap);
 	if (rv != SCARD_S_SUCCESS)
 		goto end;
 
@@ -2056,23 +2064,15 @@ LONG SCardGetStatusChange(SCARDCONTEXT hContext, DWORD dwTimeout,
 
 			/* Only sleep once for each cycle of reader checks. */
 			{
-				struct wait_reader_state_change waitStatusStruct;
+				struct wait_reader_state_change waitStatusStruct = {0};
 				struct timeval before, after;
 
 				gettimeofday(&before, NULL);
 
-				waitStatusStruct.timeOut = dwTime;
 				waitStatusStruct.rv = SCARD_S_SUCCESS;
 
 				/* another thread can do SCardCancel() */
 				currentContextMap->cancellable = TRUE;
-
-				rv = MessageSendWithHeader(CMD_WAIT_READER_STATE_CHANGE,
-					currentContextMap->dwClientID,
-					sizeof(waitStatusStruct), &waitStatusStruct);
-
-				if (rv != SCARD_S_SUCCESS)
-					goto end;
 
 				/*
 				 * Read a message from the server
@@ -2089,20 +2089,7 @@ LONG SCardGetStatusChange(SCARDCONTEXT hContext, DWORD dwTimeout,
 				if (SCARD_E_TIMEOUT == rv)
 				{
 					/* ask server to remove us from the event list */
-					rv = MessageSendWithHeader(CMD_STOP_WAITING_READER_STATE_CHANGE,
-						currentContextMap->dwClientID,
-						sizeof(waitStatusStruct), &waitStatusStruct);
-
-					if (rv != SCARD_S_SUCCESS)
-						goto end;
-
-					/* Read a message from the server */
-					rv = MessageReceive(&waitStatusStruct,
-						sizeof(waitStatusStruct),
-						currentContextMap->dwClientID);
-
-					if (rv != SCARD_S_SUCCESS)
-						goto end;
+					rv = unregisterFromEvents(currentContextMap);
 				}
 
 				if (rv != SCARD_S_SUCCESS)
@@ -2116,7 +2103,7 @@ LONG SCardGetStatusChange(SCARDCONTEXT hContext, DWORD dwTimeout,
 				}
 
 				/* synchronize reader states with daemon */
-				rv = getReaderStates(currentContextMap);
+				rv = getReaderStatesAndRegisterForEvents(currentContextMap);
 				if (rv != SCARD_S_SUCCESS)
 					goto end;
 
@@ -2147,6 +2134,11 @@ LONG SCardGetStatusChange(SCARDCONTEXT hContext, DWORD dwTimeout,
 
 end:
 	Log1(PCSC_LOG_DEBUG, "Event Loop End");
+
+	/* if SCardCancel() has been used then the client is already
+	 * unregistered */
+	if (SCARD_E_CANCELLED != rv)
+		(void)unregisterFromEvents(currentContextMap);
 
 	(void)pthread_mutex_unlock(&currentContextMap->mMutex);
 
@@ -2331,7 +2323,7 @@ end:
  * - \ref SCARD_ATTR_CURRENT_W
  * - \ref SCARD_ATTR_DEFAULT_CLK
  * - \ref SCARD_ATTR_DEFAULT_DATA_RATE
- * - \ref SCARD_ATTR_DEVICE_FRIENDLY_NAME\n
+ * - \ref SCARD_ATTR_DEVICE_FRIENDLY_NAME
  *   Implemented by pcsc-lite if the IFD Handler (driver) returns \ref
  *   IFD_ERROR_TAG.  pcsc-lite then returns the same reader name as
  *   returned by \ref SCardListReaders().
@@ -2368,14 +2360,16 @@ end:
  * @return Error code.
  * @retval SCARD_S_SUCCESS Successful (\ref SCARD_S_SUCCESS)
  * @retval SCARD_E_UNSUPPORTED_FEATURE the \p dwAttrId attribute is not supported by the driver (\ref SCARD_E_UNSUPPORTED_FEATURE)
- * @retval SCARD_E_NOT_TRANSACTED the driver returned an error (\ref SCARD_E_NOT_TRANSACTED)
- * @retval SCARD_E_INSUFFICIENT_BUFFER \p cbAttrLen is too big (\ref SCARD_E_INSUFFICIENT_BUFFER)
- * @retval SCARD_E_INSUFFICIENT_BUFFER \p pbAttr buffer not large enough. In that case the expected buffer size is indicated in \p *pcbAttrLen (\ref SCARD_E_INSUFFICIENT_BUFFER)
+ * @retval SCARD_E_NOT_TRANSACTED
+ * - the driver returned an error (\ref SCARD_E_NOT_TRANSACTED)
+ * - Data exchange not successful (\ref SCARD_E_NOT_TRANSACTED)
+ * @retval SCARD_E_INSUFFICIENT_BUFFER
+ * - \p cbAttrLen is too big (\ref SCARD_E_INSUFFICIENT_BUFFER)
+ * - \p pbAttr buffer not large enough. In that case the expected buffer size is indicated in \p *pcbAttrLen (\ref SCARD_E_INSUFFICIENT_BUFFER)
  * @retval SCARD_E_INVALID_HANDLE Invalid \p hCard handle (\ref SCARD_E_INVALID_HANDLE)
  * @retval SCARD_E_INVALID_PARAMETER A parameter is NULL and should not (\ref SCARD_E_INVALID_PARAMETER)
  * @retval SCARD_E_NO_MEMORY Memory allocation failed (\ref SCARD_E_NO_MEMORY)
  * @retval SCARD_E_NO_SERVICE The server is not running (\ref SCARD_E_NO_SERVICE)
- * @retval SCARD_E_NOT_TRANSACTED Data exchange not successful (\ref SCARD_E_NOT_TRANSACTED)
  * @retval SCARD_E_READER_UNAVAILABLE The reader has been removed (\ref SCARD_E_READER_UNAVAILABLE)
  * @retval SCARD_F_COMM_ERROR An internal communications error has been detected (\ref SCARD_F_COMM_ERROR)
  *
@@ -3338,9 +3332,6 @@ static SCONTEXTMAP * SCardGetContextTH(SCARDCONTEXT hContext)
  *
  * @param[in] hContext Application Context to be removed.
  *
- * @return Error code.
- * @retval SCARD_S_SUCCESS Success (\ref SCARD_S_SUCCESS)
- * @retval SCARD_E_INVALID_HANDLE The context \p hContext was not found (\ref SCARD_E_INVALID_HANDLE)
  */
 static void SCardRemoveContext(SCARDCONTEXT hContext)
 {
@@ -3547,5 +3538,51 @@ static LONG getReaderStates(SCONTEXTMAP * currentContextMap)
 		return rv;
 
 	return SCARD_S_SUCCESS;
+}
+
+static LONG getReaderStatesAndRegisterForEvents(SCONTEXTMAP * currentContextMap)
+{
+	int32_t dwClientID = currentContextMap->dwClientID;
+	LONG rv;
+
+	/* Get current reader states from server and register on event list */
+	rv = MessageSendWithHeader(CMD_WAIT_READER_STATE_CHANGE, dwClientID,
+		0, NULL);
+	if (rv != SCARD_S_SUCCESS)
+		return rv;
+
+	/* Read a message from the server */
+	rv = MessageReceive(&readerStates, sizeof(readerStates), dwClientID);
+	return rv;
+}
+
+static LONG unregisterFromEvents(SCONTEXTMAP * currentContextMap)
+{
+	int32_t dwClientID = currentContextMap->dwClientID;
+	LONG rv;
+	struct wait_reader_state_change waitStatusStruct = {0};
+
+	/* ask server to remove us from the event list */
+	rv = MessageSendWithHeader(CMD_STOP_WAITING_READER_STATE_CHANGE,
+		dwClientID, 0, NULL);
+	if (rv != SCARD_S_SUCCESS)
+		return rv;
+
+	/* This message can be the response to
+	 * CMD_STOP_WAITING_READER_STATE_CHANGE, an event notification or a
+	 * cancel notification.
+	 * The server side ensures, that no more messages will be sent to
+	 * the client. */
+
+	rv = MessageReceive(&waitStatusStruct, sizeof(waitStatusStruct),
+		dwClientID);
+	if (rv != SCARD_S_SUCCESS)
+		return rv;
+
+	/* if we received a cancel event the return value will be set
+	 * accordingly */
+	rv = waitStatusStruct.rv;
+
+	return rv;
 }
 

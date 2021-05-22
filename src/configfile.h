@@ -1,7 +1,7 @@
 /*
  * Header file for reading lexical config files.
  *
- * MUSCLE SmartCard Development ( http://pcsclite.alioth.debian.org/pcsclite.html )
+ * MUSCLE SmartCard Development ( https://pcsclite.apdu.fr/ )
  *
  * Copyright (C) 1999-2002
  *  David Corcoran <corcoran@musclecard.com>
@@ -34,6 +34,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #ifndef __configfile_h__
 #define __configfile_h__
+
+#include "readerfactory.h"
 
 #ifdef __cplusplus
 extern "C"

@@ -1,5 +1,5 @@
 /*
- * MUSCLE SmartCard Development ( http://pcsclite.alioth.debian.org/pcsclite.html )
+ * MUSCLE SmartCard Development ( https://pcsclite.apdu.fr/ )
  *
  * Copyright (C) 2000-2002
  *  David Corcoran <corcoran@musclecard.com>
@@ -61,13 +61,15 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 static list_t ClientsWaitingForEvent;	/**< list of client file descriptors */
 pthread_mutex_t ClientsWaitingForEvent_lock;	/**< lock for the above list */
 
-static void EHStatusHandlerThread(READER_CONTEXT *);
+static void * EHStatusHandlerThread(READER_CONTEXT *);
 
 LONG EHRegisterClientForEvent(int32_t filedes)
 {
 	(void)pthread_mutex_lock(&ClientsWaitingForEvent_lock);
 
 	(void)list_append(&ClientsWaitingForEvent, &filedes);
+
+	(void)MSGSendReaderStates(filedes);
 
 	(void)pthread_mutex_unlock(&ClientsWaitingForEvent_lock);
 
@@ -102,7 +104,7 @@ LONG EHUnregisterClientForEvent(int32_t filedes)
 {
 	LONG rv = EHTryToUnregisterClientForEvent(filedes);
 
-	if (rv < 0)
+	if (rv != SCARD_S_SUCCESS)
 		Log2(PCSC_LOG_ERROR, "Can't remove client: %d", filedes);
 
 	return rv;
@@ -245,7 +247,7 @@ LONG EHSpawnEventHandler(READER_CONTEXT * rContext)
 		return SCARD_S_SUCCESS;
 }
 
-static void EHStatusHandlerThread(READER_CONTEXT * rContext)
+static void * EHStatusHandlerThread(READER_CONTEXT * rContext)
 {
 #if 0
 	LONG rv;

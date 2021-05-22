@@ -1,5 +1,5 @@
 /*
- * MUSCLE SmartCard Development ( http://pcsclite.alioth.debian.org/pcsclite.html )
+ * MUSCLE SmartCard Development ( https://pcsclite.apdu.fr/ )
  *
  * Copyright (C) 2001-2004
  *  David Corcoran <corcoran@musclecard.com>
@@ -115,9 +115,10 @@ static int ProcessCommonChannelRequest(/*@out@*/ uint32_t *pdwClientID)
  *
  * @return Error code.
  * @retval 0 Success
- * @retval -1 Can not create the socket.
- * @retval -1 Can not bind the socket to the file \c PCSCLITE_CSOCK_NAME.
- * @retval -1 Can not put the socket in listen mode.
+ * @retval -1
+ * - Can not create the socket
+ * - or Can not bind the socket to the file \c PCSCLITE_CSOCK_NAME
+ * - or Can not put the socket in listen mode.
  */
 INTERNAL int32_t InitializeSocket(void)
 {
@@ -164,6 +165,7 @@ INTERNAL int32_t InitializeSocket(void)
 	return 0;
 }
 
+#ifdef USE_LIBSYSTEMD
 /**
  * @brief Acquires a socket passed in from systemd.
  *
@@ -176,7 +178,6 @@ INTERNAL int32_t InitializeSocket(void)
  * @retval 0 Success
  * @retval -1 Passed FD is not an UNIX socket.
  */
-#ifdef USE_LIBSYSTEMD
 INTERNAL int32_t ListenExistingSocket(int fd)
 {
 	if (!sd_is_socket(fd, AF_UNIX, SOCK_STREAM, -1))

@@ -73,7 +73,8 @@ file to detect added or removed non-USB readers (serial or PCMCIA).
 .
 .TP
 .BR \-x ", " \-\-auto\-exit
-pcscd will quit after 60 seconds of inactivity. This is used when pcscd
+pcscd will quit after 60 seconds of inactivity after the release of
+the last PC/SC context. This is used when pcscd
 os started on demand by systemd.
 .TP
 .BR \-S ", " \-\-reader\-name\-no\-serial
@@ -102,7 +103,7 @@ file.  See the
 .BR reader.conf (5)
 manual page for more information.
 .PP
-Some drivers are available at \fIhttp://pcsclite.alioth.debian.org/musclecard.com/drivers.html\fP.
+Some drivers are available at \fIhttps://muscle.apdu.fr/musclecard.com/drivers.html\fP.
 .
 .SH "USB SMART CARD READER DRIVERS"
 USB smart card reader drivers are located in

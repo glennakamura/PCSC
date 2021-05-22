@@ -1,5 +1,5 @@
 /*
- * MUSCLE SmartCard Development ( http://pcsclite.alioth.debian.org/pcsclite.html )
+ * MUSCLE SmartCard Development ( https://pcsclite.apdu.fr/ )
  *
  * Copyright (C) 2000-2003
  *  David Corcoran <corcoran@musclecard.com>
@@ -37,6 +37,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #ifndef __hotplug_h__
 #define __hotplug_h__
+
+#include "wintypes.h"
 
 #ifndef PCSCLITE_HP_DROPDIR
 #define PCSCLITE_HP_DROPDIR		"/usr/local/pcsc/drivers/"

@@ -1,5 +1,5 @@
 /*
- * MUSCLE SmartCard Development ( http://pcsclite.alioth.debian.org/pcsclite.html )
+ * MUSCLE SmartCard Development ( https://pcsclite.apdu.fr/ )
  *
  * Copyright (C) 2001-2004
  *  David Corcoran <corcoran@musclecard.com>
@@ -41,9 +41,14 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __winscard_svc_h__
 #define __winscard_svc_h__
 
+#include <stdint.h>
+
+#include "wintypes.h"
+
 	LONG ContextsInitialize(int, int);
 	void ContextsDeinitialize(void);
 	LONG CreateContextThread(uint32_t *);
 	LONG MSGSignalClient(uint32_t filedes, LONG rv);
+	LONG MSGSendReaderStates(uint32_t filedes);
 
 #endif

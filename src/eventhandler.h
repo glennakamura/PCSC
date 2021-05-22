@@ -1,5 +1,5 @@
 /*
- * MUSCLE SmartCard Development ( http://pcsclite.alioth.debian.org/pcsclite.html )
+ * MUSCLE SmartCard Development ( https://pcsclite.apdu.fr/ )
  *
  * Copyright (C) 1999-2002
  *  David Corcoran <corcoran@musclecard.com>
@@ -40,6 +40,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define __eventhandler_h__
 
 #include <stdint.h>
+
+#include "pcsclite.h"
+#include "readerfactory.h"
+#include "wintypes.h"
 
 	/**
 	 * Define an exported public reader state structure so each

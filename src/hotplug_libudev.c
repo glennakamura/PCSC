@@ -1,5 +1,5 @@
 /*
- * MUSCLE SmartCard Development ( http://pcsclite.alioth.debian.org/pcsclite.html )
+ * MUSCLE SmartCard Development ( https://pcsclite.apdu.fr/ )
  *
  * Copyright (C) 2011
  *  Ludovic Rousseau <ludovic.rousseau@free.fr>
@@ -228,15 +228,19 @@ static LONG HPReadBundleValues(void)
 					Log2(PCSC_LOG_INFO,
 						"Increase driverTracker to %d entries", driverSize);
 #endif
-					driverTracker = realloc(driverTracker,
+
+					void* tmp = realloc(driverTracker,
 						driverSize * sizeof(*driverTracker));
-					if (NULL == driverTracker)
+
+					if (NULL == tmp)
 					{
+						free(driverTracker);
 						Log1(PCSC_LOG_CRITICAL, "Not enough memory");
 						driverSize = -1;
 						(void)closedir(hpDir);
 						return -1;
 					}
+					driverTracker = tmp;
 
 					/* clean the newly allocated entries */
 					for (i=driverSize-DRIVER_TRACKER_SIZE_STEP; i<driverSize; i++)
@@ -593,7 +597,7 @@ static void HPScanUSB(struct udev *udev)
 }
 
 
-static void HPEstablishUSBNotifications(void *arg)
+static void * HPEstablishUSBNotifications(void *arg)
 {
 	struct udev_monitor *udev_monitor = arg;
 	int r;

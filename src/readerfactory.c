@@ -1,5 +1,5 @@
 /*
- * MUSCLE SmartCard Development ( http://pcsclite.alioth.debian.org/pcsclite.html )
+ * MUSCLE SmartCard Development ( https://pcsclite.apdu.fr/ )
  *
  * Copyright (C) 1999-2004
  *  David Corcoran <corcoran@musclecard.com>
@@ -379,8 +379,12 @@ LONG RFAddReader(const char *readerNameLong, int port, const char *library,
 	rv = RFInitializeReader(sReadersContexts[dwContext]);
 	if (rv != SCARD_S_SUCCESS)
 	{
+		int log_level = PCSC_LOG_ERROR;
+		if (SCARD_E_UNKNOWN_READER == rv)
+			log_level = PCSC_LOG_INFO;
+
 		/* Cannot connect to reader. Exit gracefully */
-		Log2(PCSC_LOG_ERROR, "%s init failed.", readerName);
+		Log2(log_level, "%s init failed.", readerName);
 		(void)RFRemoveReader(readerName, port);
 		return rv;
 	}
@@ -612,7 +616,7 @@ LONG RFRemoveReader(const char *readerName, int port)
 
 	for (i = 0; i < PCSCLITE_MAX_READERS_CONTEXTS; i++)
 	{
-		if (sReadersContexts[i]->vHandle != 0)
+		if (sReadersContexts[i] && (sReadersContexts[i]->vHandle != 0))
 		{
 			strncpy(lpcStripReader,
 				sReadersContexts[i]->readerState->readerName,
@@ -1087,7 +1091,8 @@ LONG RFUnlockAllSharing(SCARDHANDLE hCard, READER_CONTEXT * rContext)
 
 LONG RFInitializeReader(READER_CONTEXT * rContext)
 {
-	LONG rv;
+	LONG rv = SCARD_S_SUCCESS;
+	RESPONSECODE rvd;
 
 	/* Spawn the event handler thread */
 	Log3(PCSC_LOG_INFO, "Attempting startup of %s using %s",
@@ -1118,27 +1123,30 @@ LONG RFInitializeReader(READER_CONTEXT * rContext)
 
 	/* tries to open the port */
 #if 0
-	rv = IFDOpenIFD(rContext);
+	rvd = IFDOpenIFD(rContext);
 
-	if (rv != IFD_SUCCESS)
+	if (rvd != IFD_SUCCESS)
 	{
-		Log3(PCSC_LOG_CRITICAL, "Open Port 0x%X Failed (%s)",
+		int log_level = PCSC_LOG_CRITICAL;
+		rv = SCARD_E_INVALID_TARGET;
+
+		if (IFD_NO_SUCH_DEVICE == rvd)
+		{
+			/* wrong interface on a composite device? */
+			log_level = PCSC_LOG_INFO;
+			rv = SCARD_E_UNKNOWN_READER;
+		}
+
+		Log3(log_level, "Open Port 0x%X Failed (%s)",
 			rContext->port, rContext->device);
 
+		/* IFDOpenIFD() failed */
 		/* the reader was not started correctly */
 		rContext->slot = -1;
-
-		/* IFDOpenIFD() failed */
-		rContext->slot = -1;
-
-		if (IFD_NO_SUCH_DEVICE == rv)
-			return SCARD_E_UNKNOWN_READER;
-		else
-			return SCARD_E_INVALID_TARGET;
 	}
 #endif
 
-	return SCARD_S_SUCCESS;
+	return rv;
 }
 
 void RFUnInitializeReader(READER_CONTEXT * rContext)
@@ -1396,6 +1404,8 @@ void RFCleanupReaders(void)
 				Log2(PCSC_LOG_ERROR, "RFRemoveReader error: 0x%08lX", rv);
 
 			free(sReadersContexts[i]);
+
+			sReadersContexts[i] = NULL;
 		}
 	}
 
@@ -1617,21 +1627,25 @@ static int RFListWinscardReaders(SCARDCONTEXT hContext)
 	rv = SCardListReaders(hContext, NULL, NULL, &dwReaders);
 	mszReaders = alloca(dwReaders);
 	rv = SCardListReaders(hContext, NULL, mszReaders, &dwReaders);
-	if (rv == SCARD_S_SUCCESS) {
+	if (rv == SCARD_S_SUCCESS)
+	{
 		READER_CONTEXT *rContext;
 		char *p = mszReaders;
 		int i;
 		RFRemoveWinscardReaders(mszReaders);
-		for (i = 1; i < PCSCLITE_MAX_READERS_CONTEXTS; i++) {
+		for (i = 1; i < PCSCLITE_MAX_READERS_CONTEXTS; i++)
+		{
 			if (*p == 0)
 				break;
 			rv = RFReaderInfo(p, &rContext);
-			if (rv != SCARD_S_SUCCESS) {
+			if (rv != SCARD_S_SUCCESS)
+			{
 				rv = RFAddReader(p, 0, "winscard", "winscard");
 				if (rv == SCARD_S_SUCCESS)
 					rv = RFReaderInfo(p, &rContext);
 			}
-			if (rv == SCARD_S_SUCCESS) {
+			if (rv == SCARD_S_SUCCESS)
+			{
 				rContext->readerState->eventCounter += 1;
 				if (rgscState[i].dwEventState & SCARD_STATE_PRESENT)
 					rContext->readerState->readerState = SCARD_PRESENT;
@@ -1666,22 +1680,29 @@ static void RFUpdateWinscardReaders(void)
 		return;
 
 	n = RFListWinscardReaders(hContext);
-	while (1) {
+	while (1)
+	{
 		SYS_USleep(1000*1000); /* 1 sec */
 		rv = SCardGetStatusChange(hContext, INFINITE, rgscState, n);
-		if (rv != SCARD_S_SUCCESS) {
+		if (rv != SCARD_S_SUCCESS)
+		{
 			n = RFListWinscardReaders(hContext);
 			continue;
-		} else {
-			if (rgscState[0].dwEventState & SCARD_STATE_CHANGED) {
+		}
+		else
+		{
+			if (rgscState[0].dwEventState & SCARD_STATE_CHANGED)
+			{
 				n = RFListWinscardReaders(hContext);
 				continue;
 			}
 			rgscState[0].dwCurrentState = SCARD_STATE_UNAWARE;
-			for (i = 1; i < n; i++) {
+			for (i = 1; i < n; i++)
+			{
 				rgscState[i].dwCurrentState = rgscState[i].dwEventState;
 				rv = RFReaderInfo(rgscState[i].szReader, &rContext);
-				if (rv == SCARD_S_SUCCESS) {
+				if (rv == SCARD_S_SUCCESS)
+				{
 					rContext->readerState->eventCounter += 1;
 					if (rgscState[i].dwEventState & SCARD_STATE_PRESENT)
 						rContext->readerState->readerState = SCARD_PRESENT;
