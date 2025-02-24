@@ -1621,8 +1621,11 @@ static int RFListWinscardReaders(SCARDCONTEXT hContext)
 	DWORD dwReaders;
 	LONG rv;
 
-	rgscState[0].szReader = "\\\\?PnP?\\Notification";
-	rgscState[0].dwCurrentState = SCARD_STATE_UNAWARE;
+	if (!rgscState[0].szReader)
+	{
+		rgscState[0].szReader = "\\\\?PnP?\\Notification";
+		rgscState[0].dwCurrentState = SCARD_STATE_UNAWARE;
+	}
 
 	rv = SCardListReaders(hContext, NULL, NULL, &dwReaders);
 	mszReaders = alloca(dwReaders);
@@ -1656,10 +1659,16 @@ static int RFListWinscardReaders(SCARDCONTEXT hContext)
 					min(rgscState[i].cbAtr, MAX_ATR_SIZE));
 				UNREF_READER(rContext);
 			}
-			if (rgscState[i].szReader)
+			if (rgscState[i].szReader && strcmp(rgscState[i].szReader, p) != 0)
+			{
 				free(rgscState[i].szReader);
-			rgscState[i].szReader = strdup(p);
-			rgscState[i].dwCurrentState = SCARD_STATE_UNAWARE;
+				rgscState[i].szReader = 0;
+			}
+			if (!rgscState[i].szReader)
+			{
+				rgscState[i].szReader = strdup(p);
+				rgscState[i].dwCurrentState = SCARD_STATE_UNAWARE;
+			}
 			p += strlen(p) + 1;
 		}
 		EHSignalEventToClients();
@@ -1691,12 +1700,12 @@ static void RFUpdateWinscardReaders(void)
 		}
 		else
 		{
+			rgscState[0].dwCurrentState = rgscState[0].dwEventState;
 			if (rgscState[0].dwEventState & SCARD_STATE_CHANGED)
 			{
 				n = RFListWinscardReaders(hContext);
 				continue;
 			}
-			rgscState[0].dwCurrentState = SCARD_STATE_UNAWARE;
 			for (i = 1; i < n; i++)
 			{
 				rgscState[i].dwCurrentState = rgscState[i].dwEventState;
